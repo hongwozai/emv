@@ -1,4 +1,4 @@
-use libc::c_int;
+use libc::{c_int, c_ushort, TIOCGWINSZ, ioctl};
 use libc::termios as Termios;
 use std::io::{Read, Write};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
@@ -87,14 +87,47 @@ fn get_tty() -> io::Result<RawTerminal<fs::File>> {
         .into_raw_mode()
 }
 
+fn clear_screen(tty: &RawTerminal<fs::File>) {
+    // clear屏幕
+    let _ = tty.fd().write(b"\x1b[2J");
+    // 定位到屏幕左上角
+    let _ = tty.fd().write(b"\x1b[H");
+}
+
+fn draw_rows(tty: &RawTerminal<fs::File>) {
+    for idx in 0..24 {
+        let _ = tty.fd().write(b"~\r\n");
+    }
+}
+
+#[repr(C)]
+struct WinSize {
+    row: c_ushort,
+    col: c_ushort,
+    x: c_ushort,
+    y: c_ushort,
+}
+
+fn get_window_size(tty: &RawTerminal<fs::File>) -> io::Result<WinSize> {
+    unsafe {
+        let mut size: WinSize = mem::zeroed();
+        check_errno(ioctl(tty.fd().as_raw_fd(), TIOCGWINSZ.into(), &mut size as *mut _))?;
+        Ok(size)
+    }
+}
+
 pub fn main() -> io::Result<()> {
     let tty = get_tty()?;
     let mut buffer = [0u8; 1];
 
+    clear_screen(&tty);
+    draw_rows(&tty);
+    let _ = tty.fd().write(b"\x1b[H");
     loop {
         match tty.fd().read_exact(&mut buffer) {
             Ok(_) => {
                 if buffer[0] == b'q' {
+                    clear_screen(&tty);
                     break;
                 }
                 print!("buffer {}\r\n", buffer[0])
