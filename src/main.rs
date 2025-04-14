@@ -1,8 +1,6 @@
-mod term;
-mod event;
-
+mod editor;
 
 fn main() {
     // Termios
-    let _ = term::main();
+    let _ = editor::main();
 }
